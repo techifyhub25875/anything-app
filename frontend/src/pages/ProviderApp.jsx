@@ -10,6 +10,8 @@ export default function ProviderApp({ user }) {
   const [incoming, setIncoming] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [earnings, setEarnings] = useState(null);
+  const [aadharNumber, setAadharNumber] = useState("");
+  const [aadharPhoto, setAadharPhoto] = useState(null);
   const pollRef = useRef(null);
   const tickRef = useRef(null);
 
@@ -22,6 +24,14 @@ export default function ProviderApp({ user }) {
     );
   }, []);
 
+  function handleAadharPhoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setAadharPhoto(reader.result);
+    reader.readAsDataURL(file);
+  }
+
   async function completeRegistration() {
     const { provider: p } = await api.registerProvider({
       userId: user._id,
@@ -29,6 +39,8 @@ export default function ProviderApp({ user }) {
       subTypes: selectedSubTypes,
       lat: location.lat,
       lng: location.lng,
+      aadharNumber,
+      aadharPhoto,
     });
     setProvider(p);
   }
@@ -111,6 +123,7 @@ export default function ProviderApp({ user }) {
   }, [provider?._id]);
 
   if (!provider) {
+    const canRegister = selectedCategory && selectedSubTypes.length > 0 && location && aadharNumber && aadharPhoto;
     return (
       <div className="app-shell">
         <div className="topbar">
@@ -153,8 +166,23 @@ export default function ProviderApp({ user }) {
               </div>
             </>
           )}
+
+          <div className="section-label">Aadhar number</div>
+          <input
+            type="text"
+            placeholder="XXXX XXXX XXXX"
+            maxLength={14}
+            value={aadharNumber}
+            onChange={(e) => setAadharNumber(e.target.value)}
+          />
+
+          <div className="section-label">Aadhar card photo</div>
+          <input type="file" accept="image/*" onChange={handleAadharPhoto} />
+          {aadharPhoto && (
+            <img src={aadharPhoto} alt="Aadhar preview" style={{ maxWidth: "100%", marginTop: 8, borderRadius: 8 }} />
+          )}
         </div>
-        <button className="cta" disabled={!selectedCategory || selectedSubTypes.length === 0 || !location} onClick={completeRegistration}>
+        <button className="cta" disabled={!canRegister} onClick={completeRegistration}>
           Registration complete karein
         </button>
       </div>
