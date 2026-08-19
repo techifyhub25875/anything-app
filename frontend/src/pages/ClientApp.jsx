@@ -4,6 +4,7 @@ import { api } from "../api";
 export default function ClientApp({ user }) {
   const [screen, setScreen] = useState("home");
   const [categories, setCategories] = useState([]);
+  const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubType, setSelectedSubType] = useState("");
   const [description, setDescription] = useState("");
@@ -17,7 +18,7 @@ export default function ClientApp({ user }) {
     api.getCategories().then(setCategories).catch(() => {});
     navigator.geolocation?.getCurrentPosition(
       (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setLocation({ lat: 28.6139, lng: 77.209 }) // fallback: Delhi, for testing without GPS permission
+      () => setLocation({ lat: 28.6139, lng: 77.209 })
     );
   }, []);
 
@@ -68,27 +69,83 @@ export default function ClientApp({ user }) {
     setRating(0);
   }
 
+  // Groups categories by their `group` field for browsable sections when not
+  // searching. Once the category list grows past a handful, a flat grid
+  // stops being usable — this plus the search bar below is what keeps 100+
+  // categories navigable without any backend search endpoint (the full list
+  // is small enough in bytes to just filter client-side).
+  const groupedCategories = categories.reduce((acc, c) => {
+    const g = c.group || "Other";
+    if (!acc[g]) acc[g] = [];
+    acc[g].push(c);
+    return acc;
+  }, {});
+
+  const searchResults = search.trim()
+    ? categories.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search.toLowerCase()) ||
+          (c.group || "").toLowerCase().includes(search.toLowerCase())
+      )
+    : null;
+
   if (screen === "home") {
     return (
       <div className="app-shell">
         <div className="topbar">
-          <h2>Namaste, {user.name.split(" ")[0]} 👋</h2>
+          <h2>Namaste, {user.name.split(" ")[0]} ߑ</h2>
           <div className="sub">Aaj kya chahiye?</div>
         </div>
         <div className="body-pad">
-          <div className="section-label">Categories</div>
-          <div className="cat-grid">
-            {categories.map((c) => (
-              <div key={c._id} className="cat-card" onClick={() => pickCategory(c)}>
-                <span className="emoji">{c.icon}</span>
-                <div className="label">{c.name}</div>
-                <div className="desc">{c.description}</div>
-              </div>
-            ))}
+          <div className="section-label">Search</div>
+          <div className="search-bar-wrap">
+            <span className="search-icon">ߔ</span>
+            <input
+              className="search-bar"
+              type="text"
+              placeholder="Electrician, Salon, Car wash..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+
+          {searchResults ? (
+            <>
+              <div className="section-label">Results ({searchResults.length})</div>
+              {searchResults.length === 0 ? (
+                <p className="center-msg">Koi category nahi mili "{search}" ke liye.</p>
+              ) : (
+                <div className="cat-grid">
+                  {searchResults.map((c) => (
+                    <div key={c._id} className="cat-card" onClick={() => pickCategory(c)}>
+                      <span className="emoji">{c.icon}</span>
+                      <div className="label">{c.name}</div>
+                      <div className="desc">{c.description}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            Object.entries(groupedCategories).map(([group, cats]) => (
+              <div key={group} className="group-section">
+                <div className="group-heading">{group}</div>
+                <div className="cat-grid">
+                  {cats.map((c) => (
+                    <div key={c._id} className="cat-card" onClick={() => pickCategory(c)}>
+                      <span className="emoji">{c.icon}</span>
+                      <div className="label">{c.name}</div>
+                      <div className="desc">{c.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+
           {categories.length === 0 && (
             <p className="center-msg">
-              No categories yet — call POST /api/categories/seed once on your backend to load Phase 1 categories.
+              No categories yet — call POST /api/categories/seed once on your backend to load categories.
             </p>
           )}
         </div>
