@@ -93,6 +93,7 @@ export default function ClientApp({ user }) {
     return (
       <div className="app-shell">
         <div className="topbar">
+        <img src="/anything-logo-icon.png" alt="Anything" style={{ height: 28, marginBottom: 10 }} />               
           <h2>Namaste, {user.name.split(" ")[0]} ߑ</h2>
           <div className="sub">Aaj kya chahiye?</div>
         </div>
