@@ -48,6 +48,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="topbar">
+              <img src="/anything-logo-icon.png" alt="Anything" style={{ height: 28, marginBottom: 10 }} /> 
         <h2>Welcome to Anything</h2>
         <div className="sub">Login with your phone number</div>
       </div>
