@@ -157,6 +157,7 @@ export default function ProviderApp({ user }) {
     return (
       <div className="app-shell">
         <div className="topbar">
+          <img src="/anything-logo-icon.png" alt="Anything" style={{ height: 28, marginBottom: 10 }} /> 
           <h2>Provider registration</h2>
           <div className="sub">Apni category chunein</div>
         </div>
@@ -237,6 +238,7 @@ export default function ProviderApp({ user }) {
   return (
     <div className="app-shell">
       <div className="topbar">
+        <img src="/anything-logo-icon.png" alt="Anything" style={{ height: 28, marginBottom: 10 }} /> 
         <h2>{user.name}</h2>
         <div className="sub">{provider.category?.name}</div>
       </div>
