@@ -9,18 +9,42 @@ export default function ClientApp({ user }) {
   const [selectedSubType, setSelectedSubType] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState(null);
+  const [locationLabel, setLocationLabel] = useState("");
+  const [recentRequests, setRecentRequests] = useState([]);
   const [job, setJob] = useState(null);
   const [amount, setAmount] = useState("");
   const [rating, setRating] = useState(0);
   const pollRef = useRef(null);
+  const categoriesRef = useRef(null);
+  const recentRef = useRef(null);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch(() => {});
+    api.getRecentRequests(user._id).then((r) => setRecentRequests(r.jobs || [])).catch(() => {});
     navigator.geolocation?.getCurrentPosition(
       (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setLocation({ lat: 28.6139, lng: 77.209 })
+      () => setLocation({ lat: 28.6139, lng: 77.209 }) // fallback: Delhi, for testing without GPS permission
     );
   }, []);
+
+  // Reverse-geocodes the GPS coordinates into a human-readable area/city name
+  // for the header pill (e.g. "Connaught Place, Delhi"). Uses OpenStreetMap's
+  // free Nominatim API — no API key needed. Purely cosmetic; never blocks or
+  // affects the actual matching flow, which uses raw lat/lng directly.
+  useEffect(() => {
+    if (!location) return;
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${location.lat}&lon=${location.lng}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const a = d.address || {};
+        const area = a.suburb || a.neighbourhood || a.road || a.city_district || "";
+        const city = a.city || a.town || a.state_district || a.state || "";
+        const label = [area, city].filter(Boolean).join(", ");
+        setLocationLabel(label || "Location detected");
+      })
+      .catch(() => setLocationLabel(""));
+  }, [location]);
 
   function pickCategory(cat) {
     setSelectedCategory(cat);
@@ -67,13 +91,9 @@ export default function ClientApp({ user }) {
     setJob(null);
     setAmount("");
     setRating(0);
+    api.getRecentRequests(user._id).then((r) => setRecentRequests(r.jobs || [])).catch(() => {});
   }
 
-  // Groups categories by their `group` field for browsable sections when not
-  // searching. Once the category list grows past a handful, a flat grid
-  // stops being usable — this plus the search bar below is what keeps 100+
-  // categories navigable without any backend search endpoint (the full list
-  // is small enough in bytes to just filter client-side).
   const groupedCategories = categories.reduce((acc, c) => {
     const g = c.group || "Other";
     if (!acc[g]) acc[g] = [];
@@ -89,30 +109,51 @@ export default function ClientApp({ user }) {
       )
     : null;
 
+  function scrollToRef(ref) {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function statusLabel(status) {
+    return {
+      searching: "Searching",
+      accepted: "In Progress",
+      completed: "Completed",
+      no_provider_found: "No provider found",
+    }[status] || status;
+  }
+
   if (screen === "home") {
     return (
       <div className="app-shell">
-        <div className="topbar">
-        <img src="/anything-logo-icon.png" alt="Anything" style={{ height: 28, marginBottom: 10 }} />               
-          <h2>Namaste, {user.name.split(" ")[0]} ߑ</h2>
-          <div className="sub">Aaj kya chahiye?</div>
+        {/* Premium header: location + logo + notification */}
+        <div className="home-header">
+          <div className="location-pill">
+            <span className="pin">ߓ</span>
+            <span className="city">{locationLabel || "Detecting location..."}</span>
+          </div>
+          <img src="/anything-logo-icon.png" alt="Anything" className="brand-mark" />
+          <div className="bell">ߔ</div>
         </div>
-        <div className="body-pad">
-          <div className="section-label">Search</div>
-          <div className="search-bar-wrap">
-            <span className="search-icon">ߔ</span>
+
+        {/* Large search area */}
+        <div className="home-search-wrap" ref={searchRef}>
+          <div className="home-search">
+            <span className="icon">ߔ</span>
             <input
-              className="search-bar"
               type="text"
-              placeholder="Electrician, Salon, Car wash..."
+              placeholder="What do you need today?"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+        </div>
 
+        <div className="body-pad" style={{ paddingTop: 4 }}>
           {searchResults ? (
             <>
-              <div className="section-label">Results ({searchResults.length})</div>
+              <div className="section-header">
+                <div className="title">Results ({searchResults.length})</div>
+              </div>
               {searchResults.length === 0 ? (
                 <p className="center-msg">Koi category nahi mili "{search}" ke liye.</p>
               ) : (
@@ -128,27 +169,127 @@ export default function ClientApp({ user }) {
               )}
             </>
           ) : (
-            Object.entries(groupedCategories).map(([group, cats]) => (
-              <div key={group} className="group-section">
-                <div className="group-heading">{group}</div>
-                <div className="cat-grid">
-                  {cats.map((c) => (
-                    <div key={c._id} className="cat-card" onClick={() => pickCategory(c)}>
-                      <span className="emoji">{c.icon}</span>
-                      <div className="label">{c.name}</div>
-                      <div className="desc">{c.description}</div>
-                    </div>
-                  ))}
+            <>
+              {/* Hero section */}
+              <div className="hero-banner">
+                <h1>Reliable help, right around you.</h1>
+                <p>Trusted local professionals. Simple, fast and reliable.</p>
+                <button className="hero-cta" onClick={() => scrollToRef(categoriesRef)}>
+                  Book a Service
+                </button>
+              </div>
+
+              {/* Popular services — horizontal scroll, uses real category data */}
+              {categories.length > 0 && (
+                <>
+                  <div className="section-header">
+                    <div className="title">Popular Services</div>
+                  </div>
+                  <div className="hscroll">
+                    {categories.slice(0, 8).map((c) => (
+                      <div key={c._id} className="popular-card" onClick={() => pickCategory(c)}>
+                        <div className="icon-wrap">{c.icon}</div>
+                        <div className="name">{c.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Sponsored — UI-only placeholder, not wired to any backend/ad system yet */}
+              <div className="section-header">
+                <div className="title">Featured for you</div>
+              </div>
+              <div className="sponsored-card">
+                <span className="sponsored-tag">Sponsored</span>
+                <div className="thumb">⭐</div>
+                <div>
+                  <div className="name">Sharma Electricals</div>
+                  <div className="desc">Same-day electrical repairs & installations</div>
+                  <div className="meta-row">
+                    <span>★ 4.8</span>
+                    <span>1.2 km away</span>
+                  </div>
+                  <div className="offer-badge">10% OFF first booking</div>
                 </div>
               </div>
-            ))
-          )}
 
-          {categories.length === 0 && (
-            <p className="center-msg">
-              No categories yet — call POST /api/categories/seed once on your backend to load categories.
-            </p>
+              {/* All categories, grouped */}
+              <div ref={categoriesRef}>
+                <div className="section-header">
+                  <div className="title">Browse All</div>
+                </div>
+                {Object.entries(groupedCategories).map(([group, cats]) => (
+                  <div key={group} className="group-section">
+                    <div className="group-heading">{group}</div>
+                    <div className="cat-grid">
+                      {cats.map((c) => (
+                        <div key={c._id} className="cat-card" onClick={() => pickCategory(c)}>
+                          <span className="emoji">{c.icon}</span>
+                          <div className="label">{c.name}</div>
+                          <div className="desc">{c.description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {categories.length === 0 && (
+                  <p className="center-msg">
+                    No categories yet — call POST /api/categories/seed once on your backend to load categories.
+                  </p>
+                )}
+              </div>
+
+              {/* Recent requests — real data from backend */}
+              <div ref={recentRef}>
+                <div className="section-header">
+                  <div className="title">Recent Requests</div>
+                </div>
+                {recentRequests.length === 0 ? (
+                  <p className="center-msg">Abhi tak koi request nahi ki hai. Upar se koi service book karein.</p>
+                ) : (
+                  recentRequests.map((r) => (
+                    <div key={r._id} className="recent-card">
+                      <div>
+                        <div className="name">{r.category?.icon} {r.category?.name} – {r.subType}</div>
+                        <div className="sub">{r.description?.slice(0, 40)}</div>
+                        <span className={`status-pill ${r.status}`}>{statusLabel(r.status)}</span>
+                      </div>
+                      {r.status === "completed" && (
+                        <div className="right">
+                          <div className="amount">₹{r.amountPaid}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Trust strip */}
+              <div className="trust-strip">
+                <div className="item"><span className="ic">✅</span><div className="lbl">Verified Providers</div></div>
+                <div className="item"><span className="ic">ߓ</span><div className="lbl">Nearby Services</div></div>
+                <div className="item"><span className="ic">ߔ</span><div className="lbl">Secure Experience</div></div>
+                <div className="item"><span className="ic">⚡</span><div className="lbl">Fast Response</div></div>
+              </div>
+            </>
           )}
+        </div>
+
+        {/* Bottom navigation */}
+        <div className="bottom-nav">
+          <button className="nav-item active" onClick={() => scrollToRef(searchRef)}>
+            <span className="ic">ߏ</span>Home
+          </button>
+          <button className="nav-item" onClick={() => scrollToRef(categoriesRef)}>
+            <span className="ic">ߓ</span>Explore
+          </button>
+          <button className="nav-item center-action" onClick={() => scrollToRef(searchRef)}>
+            <span className="ic">+</span>
+          </button>
+          <button className="nav-item" onClick={() => scrollToRef(recentRef)}>
+            <span className="ic">ߧ</span>Requests
+          </button>
         </div>
       </div>
     );
