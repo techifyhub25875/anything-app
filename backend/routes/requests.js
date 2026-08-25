@@ -138,4 +138,14 @@ router.post("/:id/complete", async (req, res) => {
   res.json({ success: true, job });
 });
 
+// Client's recent requests (any status), newest first. Purely additive —
+// does not touch any existing matching/accept/complete logic above.
+router.get("/client/:clientId/recent", async (req, res) => {
+  const jobs = await JobRequest.find({ client: req.params.clientId })
+    .populate("category")
+    .populate("acceptedProvider")
+    .sort({ createdAt: -1 })
+    .limit(5);
+  res.json({ jobs });
+});
 export default router;
